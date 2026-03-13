@@ -10,7 +10,7 @@ data "aws_ami" "amazon_linux_2" {
 
 resource "aws_key_pair" "consul" {
   key_name   = "consul-ecs-key"
-  public_key = file("~/.ssh/id_rsa.pub")
+  public_key = file(var.ssh_public_key_path)
 }
 
 resource "aws_instance" "consul" {
