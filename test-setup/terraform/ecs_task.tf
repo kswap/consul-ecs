@@ -145,10 +145,11 @@ resource "aws_ecs_task_definition" "test" {
 }
 
 resource "aws_ecs_service" "test" {
-  name            = "consul-ecs-test"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.test.arn
-  desired_count   = 1
+  name                   = "consul-ecs-test"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.test.arn
+  desired_count          = 1
+  enable_execute_command = true
 
   capacity_provider_strategy {
     capacity_provider = aws_ecs_capacity_provider.ec2.name

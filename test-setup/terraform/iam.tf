@@ -49,14 +49,26 @@ resource "aws_iam_role_policy" "consul_ecs_task_ecs" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ecs:ListTasks",
-        "ecs:DescribeTasks",
-      ]
-      Resource = "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:ListTasks",
+          "ecs:DescribeTasks",
+        ]
+        Resource = "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
+        ]
+        Resource = "*"
+      }
+    ]
   })
 }
 

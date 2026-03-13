@@ -9,9 +9,11 @@
 #
 # Strategy:
 #   1. Wait until proxy check is passing (HEALTHY baseline, ModifyIndex = I0).
-#   2. Force a new deployment → proxy briefly goes critical during startup.
-#   3. Wait for proxy to return to passing → record ModifyIndex = I1 (must be > I0).
-#   4. Wait 10 more seconds → record ModifyIndex = I2 (must equal I1, no redundant writes).
+#   2. Use ECS Exec to SIGSTOP nginx (PID 1) → health check times out → app UNHEALTHY → proxy CRITICAL.
+#   3. Wait for proxy to go critical → record ModifyIndex (should advance).
+#   4. Use ECS Exec to SIGCONT nginx → health check passes → app HEALTHY → proxy PASSING.
+#   5. Wait for proxy to return to passing → record ModifyIndex = I1 (must be > I0).
+#   6. Wait 10 more seconds → record ModifyIndex = I2 (must equal I1, no redundant writes).
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,8 +28,11 @@ SERVICE=$(terraform -chdir="$TF_DIR" output -raw ecs_service_name)
 H="X-Consul-Token: $TOKEN"
 CHECKS_URL="http://$CONSUL_IP:8500/v1/health/checks/test-service-sidecar-proxy"
 
-get_status()      { curl -sf -H "$H" "$CHECKS_URL" | jq -r '.[0].Status // "not_found"'; }
+get_status()       { curl -sf -H "$H" "$CHECKS_URL" | jq -r '.[0].Status // "not_found"'; }
 get_modify_index() { curl -sf -H "$H" "$CHECKS_URL" | jq '.[0].ModifyIndex'; }
+
+TASK_ARN=$(aws ecs list-tasks --region "$REGION" --cluster "$CLUSTER" \
+  --service-name "$SERVICE" --query 'taskArns[0]' --output text)
 
 echo "=== Step 1: Wait for proxy check to reach passing baseline ==="
 TIMEOUT=120; ELAPSED=0
@@ -40,17 +45,34 @@ I0=$(get_modify_index)
 echo "  Baseline passing. ModifyIndex I0 = $I0"
 
 echo ""
-echo "=== Step 2: Force deployment (triggers critical → passing transition) ==="
-aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
-  --force-new-deployment > /dev/null
-echo "  Deployment triggered."
-
-# Wait briefly for old task to start shutting down / new task to start
-sleep 10
+echo "=== Step 2: Pause nginx with SIGSTOP to trigger UNHEALTHY ==="
+aws ecs execute-command --region "$REGION" \
+  --cluster "$CLUSTER" --task "$TASK_ARN" \
+  --container app --interactive \
+  --command "kill -STOP 1" 2>/dev/null || true
+echo "  SIGSTOP sent to nginx."
 
 echo ""
-echo "=== Step 3: Wait for proxy to return to passing ==="
-TIMEOUT=180; ELAPSED=0
+echo "=== Step 3: Wait for proxy to go critical ==="
+TIMEOUT=60; ELAPSED=0
+until [ "$(get_status)" = "critical" ]; do
+  sleep 3; ELAPSED=$((ELAPSED+3))
+  [ $ELAPSED -ge $TIMEOUT ] && echo "FAIL: Proxy never went critical after SIGSTOP" && exit 1
+  echo "  waiting for critical... (${ELAPSED}s, status=$(get_status))"
+done
+echo "  Proxy is critical. ModifyIndex = $(get_modify_index)"
+
+echo ""
+echo "=== Step 4: Resume nginx with SIGCONT ==="
+aws ecs execute-command --region "$REGION" \
+  --cluster "$CLUSTER" --task "$TASK_ARN" \
+  --container app --interactive \
+  --command "kill -CONT 1" 2>/dev/null || true
+echo "  SIGCONT sent to nginx."
+
+echo ""
+echo "=== Step 5: Wait for proxy to return to passing ==="
+TIMEOUT=120; ELAPSED=0
 until [ "$(get_status)" = "passing" ]; do
   sleep 5; ELAPSED=$((ELAPSED+5))
   [ $ELAPSED -ge $TIMEOUT ] && echo "FAIL: Proxy never returned to passing" && exit 1
@@ -67,7 +89,7 @@ fi
 echo "  ModifyIndex advanced as expected ($I0 → $I1)"
 
 echo ""
-echo "=== Step 4: Wait 10s and verify no further writes ==="
+echo "=== Step 6: Wait 10s and verify no further writes ==="
 sleep 10
 
 I2=$(get_modify_index)

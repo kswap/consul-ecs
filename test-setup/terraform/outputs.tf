@@ -27,3 +27,9 @@ output "region" {
   description = "AWS region"
   value       = var.region
 }
+
+output "consul_token" {
+  description = "Consul bootstrap management token"
+  value       = var.consul_token
+  sensitive   = true
+}
