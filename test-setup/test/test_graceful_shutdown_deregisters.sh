@@ -12,6 +12,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$(cd "$SCRIPT_DIR/../terraform" && pwd)"
 
+REGION=$(terraform -chdir="$TF_DIR" output -raw region)
 CONSUL_IP=$(terraform -chdir="$TF_DIR" output -raw consul_server_ip)
 TOKEN=$(terraform -chdir="$TF_DIR" output -raw consul_token 2>/dev/null || echo "${CONSUL_TOKEN}")
 CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
@@ -31,10 +32,10 @@ echo "  Proxy check is passing. Proceeding."
 
 echo ""
 echo "=== Phase 1: Checks go critical immediately after SIGTERM ==="
-TASK_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+TASK_ARN=$(aws ecs list-tasks --region "$REGION" --cluster "$CLUSTER" --service-name "$SERVICE" \
   --query 'taskArns[0]' --output text)
 echo "  Stopping task $TASK_ARN ..."
-aws ecs stop-task --cluster "$CLUSTER" --task "$TASK_ARN" --reason "regression test" > /dev/null
+aws ecs stop-task --region "$REGION" --cluster "$CLUSTER" --task "$TASK_ARN" --reason "regression test" > /dev/null
 
 CAUGHT_CRITICAL=false
 for i in $(seq 1 15); do
@@ -80,8 +81,8 @@ done
 
 echo ""
 echo "=== Restoring service with a fresh deployment ==="
-aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
   --force-new-deployment > /dev/null
 echo "  Waiting for service to restabilize..."
-aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+aws ecs wait services-stable --region "$REGION" --cluster "$CLUSTER" --services "$SERVICE"
 echo "  Service restored."

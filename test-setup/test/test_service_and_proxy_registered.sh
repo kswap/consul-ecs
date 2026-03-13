@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$(cd "$SCRIPT_DIR/../terraform" && pwd)"
 
+REGION=$(terraform -chdir="$TF_DIR" output -raw region)
 CONSUL_IP=$(terraform -chdir="$TF_DIR" output -raw consul_server_ip)
 TOKEN=$(terraform -chdir="$TF_DIR" output -raw consul_token 2>/dev/null || echo "${CONSUL_TOKEN}")
 CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
@@ -16,7 +17,7 @@ SERVICE=$(terraform -chdir="$TF_DIR" output -raw ecs_service_name)
 H="X-Consul-Token: $TOKEN"
 
 echo "=== Waiting for ECS service to stabilize ==="
-aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+aws ecs wait services-stable --region "$REGION" --cluster "$CLUSTER" --services "$SERVICE"
 
 echo ""
 echo "=== Checking test-service registration ==="

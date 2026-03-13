@@ -12,7 +12,8 @@ CONSUL_IP=$(terraform -chdir="$TEST_SETUP_DIR/terraform" output -raw consul_serv
 
 echo "=== Waiting for Consul to start on $CONSUL_IP ==="
 until ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-    ec2-user@"$CONSUL_IP" "consul members" 2>/dev/null; do
+    ec2-user@"$CONSUL_IP" \
+    "curl -sf http://localhost:8500/v1/status/leader | grep -qv '\"\"'" 2>/dev/null; do
   echo "  not ready yet, retrying in 3s..."
   sleep 3
 done

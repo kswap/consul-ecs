@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$(cd "$SCRIPT_DIR/../terraform" && pwd)"
 
+REGION=$(terraform -chdir="$TF_DIR" output -raw region)
 CONSUL_IP=$(terraform -chdir="$TF_DIR" output -raw consul_server_ip)
 TOKEN=$(terraform -chdir="$TF_DIR" output -raw consul_token 2>/dev/null || echo "${CONSUL_TOKEN}")
 CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
@@ -17,7 +18,7 @@ echo "=== Bug2: Verifying proxy check is critical while app container is startin
 echo ""
 
 echo "Forcing a new ECS task deployment to trigger container restart..."
-aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
   --force-new-deployment > /dev/null
 echo "  Deployment triggered. Waiting 5s for old task to stop..."
 sleep 5

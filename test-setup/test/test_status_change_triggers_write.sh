@@ -17,6 +17,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$(cd "$SCRIPT_DIR/../terraform" && pwd)"
 
+REGION=$(terraform -chdir="$TF_DIR" output -raw region)
 CONSUL_IP=$(terraform -chdir="$TF_DIR" output -raw consul_server_ip)
 TOKEN=$(terraform -chdir="$TF_DIR" output -raw consul_token 2>/dev/null || echo "${CONSUL_TOKEN}")
 CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
@@ -40,7 +41,7 @@ echo "  Baseline passing. ModifyIndex I0 = $I0"
 
 echo ""
 echo "=== Step 2: Force deployment (triggers critical → passing transition) ==="
-aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
   --force-new-deployment > /dev/null
 echo "  Deployment triggered."
 

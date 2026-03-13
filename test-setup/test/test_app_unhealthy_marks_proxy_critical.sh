@@ -11,6 +11,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$(cd "$SCRIPT_DIR/../terraform" && pwd)"
 
+REGION=$(terraform -chdir="$TF_DIR" output -raw region)
 CONSUL_IP=$(terraform -chdir="$TF_DIR" output -raw consul_server_ip)
 TOKEN=$(terraform -chdir="$TF_DIR" output -raw consul_token 2>/dev/null || echo "${CONSUL_TOKEN}")
 CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
@@ -30,7 +31,7 @@ echo "  Proxy check is passing. Proceeding."
 
 echo ""
 echo "=== Finding running task ARN ==="
-TASK_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+TASK_ARN=$(aws ecs list-tasks --region "$REGION" --cluster "$CLUSTER" --service-name "$SERVICE" \
   --query 'taskArns[0]' --output text)
 if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
   echo "FAIL: No running task found"
@@ -43,6 +44,7 @@ echo "=== Killing the app process inside the task to trigger UNHEALTHY ==="
 # ECS Exec requires the task to have enableExecuteCommand=true.
 # This kills the http-echo process; ECS health check will then fail within ~15s.
 aws ecs execute-command \
+  --region "$REGION" \
   --cluster "$CLUSTER" \
   --task "$TASK_ARN" \
   --container app \
@@ -74,8 +76,8 @@ fi
 
 echo ""
 echo "=== Restoring service with a fresh deployment ==="
-aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
   --force-new-deployment > /dev/null
 echo "  Waiting for service to restabilize..."
-aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+aws ecs wait services-stable --region "$REGION" --cluster "$CLUSTER" --services "$SERVICE"
 echo "  Service restored."
