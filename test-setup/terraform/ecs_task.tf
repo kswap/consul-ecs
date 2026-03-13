@@ -25,6 +25,7 @@ resource "aws_ecs_task_definition" "test" {
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
         { name = "CONSUL_HTTP_TOKEN", value = var.consul_token },
+        { name = "CONSUL_HTTP_SSL", value = "false" },
       ]
 
       mountPoints = [
@@ -46,7 +47,11 @@ resource "aws_ecs_task_definition" "test" {
       essential         = true
       memoryReservation = 128
 
-      command = ["-config-file=/consul/consul-dataplane.json"]
+      command = [
+        "-config-file=/consul/consul-dataplane.json",
+        "-credential-type=static",
+        "-static-token=${var.consul_token}",
+      ]
 
       dependsOn = [
         { containerName = "mesh-init", condition = "SUCCESS" }
@@ -75,6 +80,7 @@ resource "aws_ecs_task_definition" "test" {
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
         { name = "CONSUL_HTTP_TOKEN", value = var.consul_token },
+        { name = "CONSUL_HTTP_SSL", value = "false" },
       ]
 
       dependsOn = [
@@ -96,18 +102,16 @@ resource "aws_ecs_task_definition" "test" {
     },
     {
       name              = "app"
-      image             = "hashicorp/http-echo:latest"
+      image             = "nginx:alpine"
       essential         = true
       memoryReservation = 64
 
-      command = ["-text=hello"]
-
       portMappings = [
-        { containerPort = 5678, hostPort = 0, protocol = "tcp" }
+        { containerPort = 80, hostPort = 0, protocol = "tcp" }
       ]
 
       healthCheck = {
-        command     = ["CMD", "sh", "-c", "wget -qO- http://localhost:5678/ || exit 1"]
+        command     = ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
         interval    = 5
         timeout     = 3
         retries     = 3
