@@ -53,6 +53,16 @@ resource "aws_ecs_task_definition" "test" {
         "-static-token=${var.consul_token}",
       ]
 
+      # health-sync tracks consul-dataplane's ECS health status to derive the
+      # proxy check state. Without this, the status is "" → mapped to UNHEALTHY.
+      healthCheck = {
+        command     = ["CMD-SHELL", "wget -qO- http://localhost:22000/ready || exit 1"]
+        interval    = 5
+        timeout     = 3
+        retries     = 3
+        startPeriod = 30
+      }
+
       dependsOn = [
         { containerName = "mesh-init", condition = "SUCCESS" }
       ]
