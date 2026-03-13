@@ -16,10 +16,11 @@ resource "aws_ecs_task_definition" "test" {
 
   container_definitions = jsonencode([
     {
-      name      = "mesh-init"
-      image     = "${aws_ecr_repository.consul_ecs.repository_url}:latest"
-      command   = ["mesh-init"]
-      essential = false
+      name              = "mesh-init"
+      image             = "${aws_ecr_repository.consul_ecs.repository_url}:latest"
+      command           = ["mesh-init"]
+      essential         = false
+      memoryReservation = 64
 
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
@@ -40,9 +41,10 @@ resource "aws_ecs_task_definition" "test" {
       }
     },
     {
-      name      = "consul-dataplane"
-      image     = "hashicorp/consul-dataplane:1.6.3"
-      essential = true
+      name              = "consul-dataplane"
+      image             = "hashicorp/consul-dataplane:1.6.3"
+      essential         = true
+      memoryReservation = 128
 
       command = ["-config-file=/consul/consul-dataplane.json"]
 
@@ -64,10 +66,11 @@ resource "aws_ecs_task_definition" "test" {
       }
     },
     {
-      name      = "health-sync"
-      image     = "${aws_ecr_repository.consul_ecs.repository_url}:latest"
-      command   = ["health-sync"]
-      essential = false
+      name              = "health-sync"
+      image             = "${aws_ecr_repository.consul_ecs.repository_url}:latest"
+      command           = ["health-sync"]
+      essential         = false
+      memoryReservation = 64
 
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
@@ -92,9 +95,10 @@ resource "aws_ecs_task_definition" "test" {
       }
     },
     {
-      name      = "app"
-      image     = "hashicorp/http-echo:latest"
-      essential = true
+      name              = "app"
+      image             = "hashicorp/http-echo:latest"
+      essential         = true
+      memoryReservation = 64
 
       command = ["-text=hello"]
 
