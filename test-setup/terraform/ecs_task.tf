@@ -55,8 +55,10 @@ resource "aws_ecs_task_definition" "test" {
 
       # health-sync tracks consul-dataplane's ECS health status to derive the
       # proxy check state. Without this, the status is "" → mapped to UNHEALTHY.
+      # Uses the consul-ecs binary copied to /consul by mesh-init (net-dial is a
+      # TCP connectivity check built specifically for proxy health checks).
       healthCheck = {
-        command     = ["CMD-SHELL", "wget -qO- http://localhost:22000/ready || exit 1"]
+        command     = ["CMD", "/consul/consul-ecs", "net-dial", "localhost:22000"]
         interval    = 5
         timeout     = 3
         retries     = 3
