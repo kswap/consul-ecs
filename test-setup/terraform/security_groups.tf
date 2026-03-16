@@ -8,7 +8,7 @@ resource "aws_security_group" "consul" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.your_ip_cidr]
+    cidr_blocks = [local.my_ip_cidr]
   }
 
   ingress {
@@ -48,7 +48,7 @@ resource "aws_security_group" "consul" {
     from_port   = 8500
     to_port     = 8500
     protocol    = "tcp"
-    cidr_blocks = [var.your_ip_cidr]
+    cidr_blocks = [local.my_ip_cidr]
   }
 
   ingress {

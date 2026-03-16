@@ -38,8 +38,8 @@ resource "aws_instance" "consul" {
     mkdir -p /etc/consul.d /var/lib/consul
     chown -R consul:consul /etc/consul.d /var/lib/consul
 
-    # Write Consul config
-    cat > /etc/consul.d/consul.hcl <<'CONSULCONFIG'
+    # Write Consul config (initial_management token pre-set by Terraform)
+    cat > /etc/consul.d/consul.hcl <<CONSULCONFIG
 datacenter = "dc1"
 data_dir   = "/var/lib/consul"
 server     = true
@@ -54,6 +54,9 @@ acl {
   enabled                  = true
   default_policy           = "deny"
   enable_token_persistence = true
+  tokens {
+    initial_management = "${random_uuid.consul_token.result}"
+  }
 }
 CONSULCONFIG
 

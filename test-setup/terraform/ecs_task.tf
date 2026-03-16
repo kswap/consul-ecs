@@ -24,7 +24,7 @@ resource "aws_ecs_task_definition" "test" {
 
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
-        { name = "CONSUL_HTTP_TOKEN", value = var.consul_token },
+        { name = "CONSUL_HTTP_TOKEN", value = random_uuid.consul_token.result },
         { name = "CONSUL_HTTP_SSL", value = "false" },
       ]
 
@@ -50,7 +50,7 @@ resource "aws_ecs_task_definition" "test" {
       command = [
         "-config-file=/consul/consul-dataplane.json",
         "-credential-type=static",
-        "-static-token=${var.consul_token}",
+        "-static-token=${random_uuid.consul_token.result}",
       ]
 
       # health-sync tracks consul-dataplane's ECS health status to derive the
@@ -91,7 +91,7 @@ resource "aws_ecs_task_definition" "test" {
 
       environment = [
         { name = "CONSUL_ECS_CONFIG_JSON", value = local.consul_ecs_config },
-        { name = "CONSUL_HTTP_TOKEN", value = var.consul_token },
+        { name = "CONSUL_HTTP_TOKEN", value = random_uuid.consul_token.result },
         { name = "CONSUL_HTTP_SSL", value = "false" },
       ]
 

@@ -29,7 +29,7 @@ output "region" {
 }
 
 output "consul_token" {
-  description = "Consul bootstrap management token"
-  value       = var.consul_token
+  description = "Consul bootstrap management token (managed by Terraform)"
+  value       = random_uuid.consul_token.result
   sensitive   = true
 }
