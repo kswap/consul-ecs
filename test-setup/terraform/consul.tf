@@ -14,11 +14,12 @@ resource "aws_key_pair" "consul" {
 }
 
 resource "aws_instance" "consul" {
-  ami                    = data.aws_ami.amazon_linux_2.id
-  instance_type          = var.instance_type_consul
-  subnet_id              = aws_subnet.public[0].id
-  vpc_security_group_ids = [aws_security_group.consul.id]
-  key_name               = aws_key_pair.consul.key_name
+  ami                         = data.aws_ami.amazon_linux_2.id
+  instance_type               = var.instance_type_consul
+  subnet_id                   = aws_subnet.public[0].id
+  vpc_security_group_ids      = [aws_security_group.consul.id]
+  key_name                    = aws_key_pair.consul.key_name
+  user_data_replace_on_change = true
 
   user_data = <<-EOF
     #!/bin/bash
