@@ -122,8 +122,10 @@ resource "aws_ecs_task_definition" "test" {
         { containerPort = 80, hostPort = 0, protocol = "tcp" }
       ]
 
+      # Health check with a flag file toggle so tests can force UNHEALTHY via
+      # ECS Exec: `touch /tmp/sick` → fails, `rm /tmp/sick` → passes.
       healthCheck = {
-        command     = ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+        command     = ["CMD-SHELL", "[ ! -f /tmp/sick ] && wget -qO- http://localhost:80/ > /dev/null || exit 1"]
         interval    = 5
         timeout     = 3
         retries     = 3

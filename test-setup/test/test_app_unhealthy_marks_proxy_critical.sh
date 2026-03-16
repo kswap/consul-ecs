@@ -3,9 +3,9 @@
 # health-sync must mark the proxy check critical. This exercises the
 # ecsHealthToConsulHealth mapping and computeOverallDataplaneHealth path.
 #
-# Strategy: stop the app container inside the running ECS task via SSM exec so
-# its ECS health check starts failing, then verify the proxy check goes critical.
-# Afterwards we force a fresh deployment to restore the service.
+# Strategy: use ECS Exec to SIGSTOP nginx (pauses the process without killing
+# the container), causing the ECS health check to time out → UNHEALTHY.
+# Then SIGCONT resumes nginx to restore the healthy state.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,12 +18,13 @@ CLUSTER=$(terraform -chdir="$TF_DIR" output -raw ecs_cluster_name)
 SERVICE=$(terraform -chdir="$TF_DIR" output -raw ecs_service_name)
 
 H="X-Consul-Token: $TOKEN"
+CHECKS_URL="http://$CONSUL_IP:8500/v1/health/checks/test-service-sidecar-proxy"
+
+get_proxy_status() { curl -sf -H "$H" "$CHECKS_URL" | jq -r '.[0].Status // "not_found"'; }
 
 echo "=== Waiting for proxy check to be passing before the test ==="
 TIMEOUT=120; ELAPSED=0
-until [ "$(curl -sf -H "$H" \
-    "http://$CONSUL_IP:8500/v1/health/checks/test-service-sidecar-proxy" \
-    | jq -r '.[0].Status')" = "passing" ]; do
+until [ "$(get_proxy_status)" = "passing" ]; do
   sleep 5; ELAPSED=$((ELAPSED+5))
   [ $ELAPSED -ge $TIMEOUT ] && echo "FAIL: Proxy never reached passing before test" && exit 1
 done
@@ -31,8 +32,8 @@ echo "  Proxy check is passing. Proceeding."
 
 echo ""
 echo "=== Finding running task ARN ==="
-TASK_ARN=$(aws ecs list-tasks --region "$REGION" --cluster "$CLUSTER" --service-name "$SERVICE" \
-  --query 'taskArns[0]' --output text)
+TASK_ARN=$(aws ecs list-tasks --region "$REGION" --cluster "$CLUSTER" \
+  --service-name "$SERVICE" --query 'taskArns[0]' --output text)
 if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
   echo "FAIL: No running task found"
   exit 1
@@ -40,25 +41,21 @@ fi
 echo "  Task ARN: $TASK_ARN"
 
 echo ""
-echo "=== Killing the app process inside the task to trigger UNHEALTHY ==="
-# ECS Exec requires the task to have enableExecuteCommand=true.
-# This kills the http-echo process; ECS health check will then fail within ~15s.
+echo "=== Creating /tmp/sick flag to trigger UNHEALTHY ==="
+# The app health check is: [ ! -f /tmp/sick ] && wget ... || exit 1
+# Creating /tmp/sick causes the health check to exit 1 → ECS marks UNHEALTHY.
 aws ecs execute-command \
   --region "$REGION" \
   --cluster "$CLUSTER" \
   --task "$TASK_ARN" \
   --container app \
   --interactive \
-  --command "kill 1" 2>/dev/null || true
-# If ECS Exec is unavailable, fall back to stopping the task entirely
-# (which also validates the proxy-critical path, just more abruptly).
+  --command "touch /tmp/sick" 2>/dev/null || true
+echo "  Flag file created. Waiting up to 60s for proxy check to go critical..."
 
-echo "  App process kill sent. Waiting up to 60s for proxy check to go critical..."
 CAUGHT_CRITICAL=false
 for i in $(seq 1 20); do
-  STATUS=$(curl -sf -H "$H" \
-    "http://$CONSUL_IP:8500/v1/health/checks/test-service-sidecar-proxy" \
-    | jq -r '.[0].Status // "not_found"')
+  STATUS=$(get_proxy_status)
   echo "  [$i] proxy check status: $STATUS"
   if [ "$STATUS" = "critical" ]; then
     CAUGHT_CRITICAL=true
@@ -66,6 +63,17 @@ for i in $(seq 1 20); do
   fi
   sleep 3
 done
+
+echo ""
+echo "=== Removing /tmp/sick flag to restore HEALTHY ==="
+aws ecs execute-command \
+  --region "$REGION" \
+  --cluster "$CLUSTER" \
+  --task "$TASK_ARN" \
+  --container app \
+  --interactive \
+  --command "rm -f /tmp/sick" 2>/dev/null || true
+echo "  Flag file removed."
 
 if $CAUGHT_CRITICAL; then
   echo "PASS: Proxy check went critical when app container became unhealthy"
@@ -75,9 +83,10 @@ else
 fi
 
 echo ""
-echo "=== Restoring service with a fresh deployment ==="
-aws ecs update-service --region "$REGION" --cluster "$CLUSTER" --service "$SERVICE" \
-  --force-new-deployment > /dev/null
-echo "  Waiting for service to restabilize..."
-aws ecs wait services-stable --region "$REGION" --cluster "$CLUSTER" --services "$SERVICE"
-echo "  Service restored."
+echo "=== Waiting for proxy check to return to passing ==="
+TIMEOUT=120; ELAPSED=0
+until [ "$(get_proxy_status)" = "passing" ]; do
+  sleep 5; ELAPSED=$((ELAPSED+5))
+  [ $ELAPSED -ge $TIMEOUT ] && echo "FAIL: Proxy never recovered to passing" && exit 1
+done
+echo "  Proxy check returned to passing."

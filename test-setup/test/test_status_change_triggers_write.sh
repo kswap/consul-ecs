@@ -45,12 +45,12 @@ I0=$(get_modify_index)
 echo "  Baseline passing. ModifyIndex I0 = $I0"
 
 echo ""
-echo "=== Step 2: Pause nginx with SIGSTOP to trigger UNHEALTHY ==="
+echo "=== Step 2: Create /tmp/sick flag to trigger UNHEALTHY ==="
 aws ecs execute-command --region "$REGION" \
   --cluster "$CLUSTER" --task "$TASK_ARN" \
   --container app --interactive \
-  --command "kill -STOP 1" 2>/dev/null || true
-echo "  SIGSTOP sent to nginx."
+  --command "touch /tmp/sick" 2>/dev/null || true
+echo "  Flag file created (/tmp/sick)."
 
 echo ""
 echo "=== Step 3: Wait for proxy to go critical ==="
@@ -63,12 +63,12 @@ done
 echo "  Proxy is critical. ModifyIndex = $(get_modify_index)"
 
 echo ""
-echo "=== Step 4: Resume nginx with SIGCONT ==="
+echo "=== Step 4: Remove /tmp/sick flag to restore HEALTHY ==="
 aws ecs execute-command --region "$REGION" \
   --cluster "$CLUSTER" --task "$TASK_ARN" \
   --container app --interactive \
-  --command "kill -CONT 1" 2>/dev/null || true
-echo "  SIGCONT sent to nginx."
+  --command "rm -f /tmp/sick" 2>/dev/null || true
+echo "  Flag file removed."
 
 echo ""
 echo "=== Step 5: Wait for proxy to return to passing ==="
